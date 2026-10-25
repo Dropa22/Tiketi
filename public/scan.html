@@ -1,0 +1,42 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tiketi Gate Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<style>
+:root{--bg:#14110f;--tx:#f5eee6;--ac:#ff6a45}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+header{padding:14px 18px;font-weight:800;font-size:20px}header b{color:var(--ac)}
+main{flex:1;padding:0 18px 24px;display:flex;flex-direction:column;gap:12px;max-width:480px;width:100%;margin:auto}
+video{width:100%;aspect-ratio:1;object-fit:cover;border-radius:20px;background:#000}
+input,button{font-size:16px;padding:13px;border-radius:12px;border:1px solid #443a33;background:#1f1b18;color:var(--tx);width:100%}
+button{background:var(--ac);border:0;font-weight:700;color:#fff}
+#res{border-radius:20px;padding:22px;text-align:center;font-size:22px;font-weight:800;min-height:96px;display:flex;align-items:center;justify-content:center;background:#1f1b18}
+#res.ok{background:#15803d}#res.bad{background:#b91c1c}small{display:block;font-weight:400;font-size:14px;margin-top:4px}
+</style></head><body>
+<header>Tiketi<b>.</b> Gate Scanner</header>
+<main>
+<input id="key" type="password" placeholder="Admin key" autocomplete="off">
+<video id="v" playsinline muted></video>
+<div id="res">Point the camera at a ticket QR</div>
+<input id="code" placeholder="Or type ticket code (TKT-…)"><button onclick="check(code.value)">Check ticket</button>
+</main>
+<script>
+const $=i=>document.getElementById(i);let busy=false,last="",lastT=0;
+$("key").value=sessionStorage.getItem("ak")||"";$("key").onchange=()=>sessionStorage.setItem("ak",$("key").value);
+async function check(c){c=(c||"").trim();if(!c||busy)return;busy=true;
+try{const r=await fetch("/api/verify",{method:"POST",headers:{"Content-Type":"application/json","x-admin-key":$("key").value},body:JSON.stringify({code:c})});
+if(r.status==401){show("bad","Wrong admin key","")}else{const j=await r.json();
+j.valid?show("ok","✅ VALID",j.event):show("bad","❌ "+j.reason,j.event||"")}}
+catch(e){show("bad","Network error","Check connection")}
+setTimeout(()=>busy=false,1500)}
+function show(c,t,s){const r=$("res");r.className=c;r.innerHTML=t+(s?"<small>"+s+"</small>":"");if(navigator.vibrate)navigator.vibrate(c=="ok"?80:[120,60,120])}
+(async()=>{try{
+const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});const v=$("v");v.srcObject=s;await v.play();
+const cv=document.createElement("canvas"),cx=cv.getContext("2d",{willReadFrequently:true});
+const det="BarcodeDetector"in window?new BarcodeDetector({formats:["qr_code"]}):null;
+async function tick(){if(v.videoWidth&&!busy){let val=null;
+if(det){const b=await det.detect(v).catch(()=>[]);if(b[0])val=b[0].rawValue}
+else if(window.jsQR){cv.width=v.videoWidth;cv.height=v.videoHeight;cx.drawImage(v,0,0);const d=cx.getImageData(0,0,cv.width,cv.height);const q=jsQR(d.data,d.width,d.height);if(q)val=q.data}
+if(val&&(val!=last||Date.now()-lastT>4000)){last=val;lastT=Date.now();check(val)}}
+setTimeout(tick,250)}tick()
+}catch(e){$("v").style.display="none";$("res").textContent="Camera unavailable. Type the code below."}})();
+</script></body></html>
